@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+  <meta name="apple-mobile-web-app-title" content="Scout AI"/>
+  <meta name="theme-color" content="#000000"/>
+  <title>Scout AI</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --gold: #e8b84b; --gold-dark: #c8962b;
+      --green: #00ff9d; --red: #ff4d6d;
+      --bg: #000; --card: #111; --border: #222;
+      --muted: #555; --text: #fff; --subtext: #999;
+    }
+    html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', sans-serif; }
+
+    #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+    #overlay.open { opacity: 1; pointer-events: all; }
+
+    #drawer { position: fixed; top: 0; left: 0; bottom: 0; width: 270px; background: #0a0a0a; border-right: 1px solid var(--border); z-index: 50; transform: translateX(-100%); transition: transform 0.3s cubic-bezier(.4,0,.2,1); display: flex; flex-direction: column; }
+    #drawer.open { transform: translateX(0); }
+    #drawer-header { padding: 52px 24px 24px; border-bottom: 1px solid var(--border); }
+    #drawer-logo { display: flex; align-items: center; gap: 12px; }
+    #drawer-icon { width: 40px; height: 40px; background: linear-gradient(135deg, var(--gold), var(--gold-dark)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    #drawer-name { font-size: 20px; font-weight: 800; }
+    #drawer-name span { color: var(--gold); }
+    #drawer-sub { font-size: 10px; color: var(--muted); letter-spacing: 2px; margin-top: 2px; }
+    #drawer-nav { flex: 1; padding: 16px 0; }
+    .nav-item { display: flex; align-items: center; gap: 14px; padding: 14px 24px; cursor: pointer; border-left: 3px solid transparent; transition: all 0.15s; color: var(--subtext); font-size: 14px; font-weight: 500; }
+    .nav-item:active { background: rgba(255,255,255,0.04); }
+    .nav-item.active { border-left-color: var(--gold); color: var(--gold); background: rgba(232,184,75,0.07); }
+    .nav-icon { font-size: 18px; width: 22px; text-align: center; }
+    #drawer-footer { padding: 20px 24px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+
+    #app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    #header { background: var(--bg); border-bottom: 1px solid var(--border); padding: 16px 20px; display: flex; align-items: center; gap: 14px; flex-shrink: 0; position: relative; z-index: 10; }
+    #menu-btn { width: 38px; height: 38px; background: var(--card); border: 1px solid var(--border); border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; cursor: pointer; flex-shrink: 0; }
+    .bar { width: 16px; height: 2px; background: var(--text); border-radius: 2px; }
+    #page-title { font-size: 17px; font-weight: 700; }
+    #live-dot { margin-left: auto; padding: 4px 10px; background: rgba(0,255,157,0.1); border: 1px solid var(--green); border-radius: 20px; font-size: 10px; color: var(--green); letter-spacing: 1px; white-space: nowrap; }
+    #live-dot.loading { border-color: var(--muted); color: var(--muted); background: rgba(255,255,255,0.05); }
+    #live-dot.error { border-color: var(--red); color: var(--red); background: rgba(255,77,109,0.1); }
+
+    #pages { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .page { display: none; padding: 20px; max-width: 600px; margin: 0 auto; }
+    .page.active { display: block; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 16px; }
+    .card-label { font-size: 10px; font-weight: 700; letter-spacing: 2px; color: var(--gold); margin-bottom: 12px; text-transform: uppercase; }
+
+    /* ANALYZE */
+    #upload-zone { border: 2px dashed #333; border-radius: 14px; padding: 44px 20px; text-align: center; cursor: pointer; background: rgba(255,255,255,0.02); transition: all 0.2s; margin-bottom: 16px; position: relative; overflow: hidden; }
+    #upload-zone.has-image { border: 2px solid var(--gold); padding: 0; }
+    #upload-zone:active { opacity: 0.75; }
+    #upload-emoji { font-size: 34px; margin-bottom: 10px; }
+    #upload-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    #upload-sub { font-size: 12px; color: var(--muted); }
+    #preview-img { width: 100%; display: none; border-radius: 12px; }
+    #loaded-badge { display: none; position: absolute; top: 10px; right: 10px; background: var(--gold); color: #000; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+    #file-input { display: none; }
+
+    .btn-row { display: flex; gap: 10px; margin-bottom: 16px; }
+    .btn-primary { flex: 1; padding: 15px; background: linear-gradient(135deg, var(--gold), var(--gold-dark)); color: #000; border: none; border-radius: 12px; font-size: 14px; font-weight: 800; cursor: pointer; transition: opacity 0.2s; }
+    .btn-primary:disabled { background: #1a1a1a; color: var(--muted); cursor: not-allowed; }
+    .btn-secondary { padding: 15px 18px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; color: var(--muted); cursor: pointer; font-size: 13px; }
+
+    #loading { display: none; text-align: center; padding: 40px 20px; }
+    #loading.show { display: block; }
+    #spin { font-size: 30px; display: inline-block; animation: spin 1s linear infinite; margin-bottom: 10px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #load-text { font-size: 11px; letter-spacing: 2px; color: var(--muted); }
+
+    #error-box { display: none; background: rgba(255,77,109,0.08); border: 1px solid var(--red); border-radius: 12px; padding: 14px 16px; color: var(--red); margin-bottom: 16px; font-size: 13px; }
+    #error-box.show { display: block; }
+
+    #analysis-box { display: none; margin-bottom: 16px; }
+    #analysis-box.show { display: block; }
+    .section-header { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--gold); text-transform: uppercase; margin: 18px 0 8px; }
+    .analysis-line { color: #ccc; line-height: 1.75; font-size: 13px; margin-bottom: 2px; }
+    .prob-card { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 16px; margin: 12px 0; }
+    .prob-label { font-size: 10px; color: var(--subtext); letter-spacing: 2px; margin-bottom: 4px; }
+    .prob-number { font-size: 54px; font-weight: 900; line-height: 1; }
+    .prob-text { font-size: 12px; color: #ddd; margin-top: 6px; }
+    .rec-card { border-radius: 12px; padding: 14px 16px; font-weight: 700; font-size: 14px; margin: 12px 0; }
+    .rec-bet { background: rgba(0,255,157,0.08); border: 1px solid var(--green); color: var(--green); }
+    .rec-fade { background: rgba(255,77,109,0.08); border: 1px solid var(--red); color: var(--red); }
+
+    /* TODAY'S GAMES strip */
+    #games-strip { margin-bottom: 16px; }
+    #games-scroll { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    #games-scroll::-webkit-scrollbar { display: none; }
+    .game-chip { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 160px; flex-shrink: 0; }
+    .game-chip-time { font-size: 10px; color: var(--muted); letter-spacing: 1px; margin-bottom: 8px; }
+    .game-chip-time.live { color: var(--green); }
+    .game-chip-teams { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    .game-chip-pitchers { font-size: 10px; color: var(--subtext); line-height: 1.6; }
+    .game-chip-score { font-size: 16px; font-weight: 800; color: var(--gold); }
+
+    /* STANDINGS */
+    .league-header { font-size: 10px; font-weight: 700; letter-spacing: 3px; color: #444; margin: 8px 0 6px; text-transform: uppercase; text-align: center; }
+    .standings-table { width: 100%; border-collapse: collapse; }
+    .standings-table th { font-size: 10px; color: var(--muted); text-align: left; padding: 0 0 8px; letter-spacing: 1px; font-weight: 600; }
+    .standings-table th:not(:first-child) { text-align: right; }
+    .standings-table td { font-size: 13px; padding: 9px 0; border-top: 1px solid #1a1a1a; }
+    .standings-table td:not(:first-child) { text-align: right; color: var(--subtext); }
+    .standings-table tr:first-child td { border-top: none; }
+    .team-name { font-weight: 600; color: var(--text); }
+    .leader .team-name { color: var(--gold); }
+    .streak-hot { color: var(--green) !important; font-weight: 700; }
+    .streak-cold { color: var(--red) !important; font-weight: 700; }
+
+    /* HISTORY */
+    .history-empty { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 13px; }
+    .history-empty-icon { font-size: 36px; margin-bottom: 12px; }
+    .pick-card { margin-bottom: 12px; }
+    .pick-meta { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .pick-date { font-size: 11px; color: var(--muted); }
+    .pick-badge { font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 20px; letter-spacing: 1px; }
+    .badge-bet { background: rgba(0,255,157,0.15); color: var(--green); }
+    .badge-fade { background: rgba(255,77,109,0.15); color: var(--red); }
+    .pick-pct { font-size: 28px; font-weight: 900; margin-bottom: 4px; }
+    .pick-summary { font-size: 12px; color: var(--subtext); line-height: 1.5; }
+    .clear-btn { width: 100%; padding: 13px; background: transparent; border: 1px solid #333; border-radius: 12px; color: var(--muted); font-size: 13px; cursor: pointer; margin-top: 4px; }
+
+    /* SETTINGS */
+    .settings-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid #1a1a1a; }
+    .settings-row:last-child { border-bottom: none; }
+    .settings-label { font-size: 14px; font-weight: 500; }
+    .settings-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .settings-input { width: 100%; background: #0a0a0a; border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 13px; padding: 12px 14px; outline: none; margin-top: 10px; }
+    .settings-input:focus { border-color: var(--gold); }
+    .settings-save { width: 100%; padding: 13px; background: linear-gradient(135deg, var(--gold), var(--gold-dark)); color: #000; border: none; border-radius: 10px; font-size: 14px; font-weight: 800; cursor: pointer; margin-top: 12px; }
+    .settings-note { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+
+    .skeleton { background: linear-gradient(90deg, #1a1a1a 25%, #222 50%, #1a1a1a 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 8px; height: 14px; margin-bottom: 8px; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  </style>
+</head>
+<body>
+
+<div id="overlay" onclick="closeDrawer()"></div>
+
+<div id="drawer">
+  <div id="drawer-header">
+    <div id="drawer-logo">
+      <div id="drawer-icon">⚾</div>
+      <div>
+        <div id="drawer-name">SCOUT <span>AI</span></div>
+        <div id="drawer-sub">MLB Pick Analyzer</div>
+      </div>
+    </div>
+  </div>
+  <nav id="drawer-nav">
+    <div class="nav-item active" data-page="analyze" onclick="goTo('analyze')"><span class="nav-icon">📸</span> Analyze Pick</div>
+    <div class="nav-item" data-page="standings" onclick="goTo('standings')"><span class="nav-icon">📋</span> Standings</div>
+    <div class="nav-item" data-page="history" onclick="goTo('history')"><span class="nav-icon">📜</span> Pick History</div>
+    <div class="nav-item" data-page="settings" onclick="goTo('settings')"><span class="nav-icon">⚙️</span> Settings</div>
+  </nav>
+  <div id="drawer-footer">SCOUT AI · Private Beta · v1.0</div>
+</div>
+
+<div id="app">
+  <div id="header">
+    <div id="menu-btn" onclick="openDrawer()">
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    </div>
+    <div id="page-title">Analyze Pick</div>
+    <div id="live-dot" class="loading">● CONNECTING</div>
+  </div>
+
+  <div id="pages">
+
+    <!-- ANALYZE -->
+    <div class="page active" id="page-analyze">
+
+      <!-- Today's Games Strip -->
+      <div id="games-strip">
+        <div class="card-label" style="margin-bottom:10px">🗓 TODAY'S GAMES</div>
+        <div id="games-scroll">
+          <div class="game-chip"><div class="skeleton" style="width:60px;height:10px"></div><div class="skeleton" style="margin-top:8px"></div><div class="skeleton" style="width:80%"></div></div>
+          <div class="game-chip"><div class="skeleton" style="width:60px;height:10px"></div><div class="skeleton" style="margin-top:8px"></div><div class="skeleton" style="width:80%"></div></div>
+        </div>
+      </div>
+
+      <div id="upload-zone" onclick="document.getElementById('file-input').click()">
+        <div id="upload-placeholder">
+          <div id="upload-emoji">📸</div>
+          <div id="upload-title">Tap to upload your pick</div>
+          <div id="upload-sub">DraftKings · FanDuel · BetMGM · PrizePicks</div>
+        </div>
+        <img id="preview-img" alt="Pick"/>
+        <div id="loaded-badge">LOADED ✓</div>
+      </div>
+      <input type="file" id="file-input" accept="image/*" onchange="handleFile(event)"/>
+
+      <div class="btn-row" id="btn-row" style="display:none">
+        <button class="btn-primary" id="analyze-btn" onclick="analyze()">⚡ Analyze Pick</button>
+        <button class="btn-secondary" onclick="clearAll()">✕</button>
+      </div>
+
+      <div id="error-box"></div>
+      <div id="loading"><div id="spin">⚾</div><div id="load-text">RUNNING THE NUMBERS...</div></div>
+      <div id="analysis-box"><div class="card"><div class="card-label">🧠 Scout's Analysis</div><div id="analysis-content"></div></div></div>
+    </div>
+
+    <!-- STANDINGS -->
+    <div class="page" id="page-standings">
+      <div id="standings-content">
+        <div class="card"><div class="skeleton"></div><div class="skeleton" style="width:80%"></div><div class="skeleton" style="width:90%"></div></div>
+      </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="page" id="page-history">
+      <div id="history-content"></div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="page" id="page-settings">
+      <div class="card">
+        <div class="card-label">🔑 Anthropic API Key</div>
+        <input class="settings-input" id="apikey-input" type="password" placeholder="sk-ant-..." autocomplete="off"/>
+        <button class="settings-save" onclick="saveKey()">Save API Key</button>
+        <div class="settings-note">Stored locally on your device only. Get a free key at <strong>console.anthropic.com</strong></div>
+      </div>
+      <div class="card">
+        <div class="card-label">🔗 Backend Status</div>
+        <div class="settings-row">
+          <div><div class="settings-label">Railway Server</div><div class="settings-sub" id="backend-url-display">Checking...</div></div>
+          <div id="backend-status" style="font-size:12px;font-weight:700;color:var(--muted)">...</div>
+        </div>
+        <div class="settings-row" style="border:none">
+          <div><div class="settings-label">Last Synced</div></div>
+          <div id="last-synced" style="font-size:12px;color:var(--muted)">Never</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">ℹ️ About</div>
+        <div class="settings-row"><div class="settings-label">Version</div><div style="font-size:12px;color:var(--muted)">Scout AI v1.0</div></div>
+        <div class="settings-row"><div class="settings-label">Status</div><span style="color:var(--green);font-size:12px;font-weight:700">Private Beta</span></div>
+        <div class="settings-row" style="border:none"><div class="settings-label">Model</div><div style="font-size:12px;color:var(--muted)">Claude Sonnet 4</div></div>
+      </div>
+      <button class="clear-btn" onclick="clearHistory()">🗑 Clear Pick History</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const BACKEND = 'https://scout-ai-backend-production-aaea.up.railway.app';
+let liveStandings = null;
+let liveGames = null;
+let imageBase64 = null;
+let pickHistory = JSON.parse(localStorage.getItem('scout_history') || '[]');
+
+const SYSTEM_PROMPT = `You are SCOUT — an elite MLB statistical analyst and sports betting expert with 20 years of experience.
+
+When given live MLB standings, today's games with starting pitchers, and a betting pick screenshot, you will:
+1. Identify the teams/players in the pick
+2. Cross-reference with the LIVE standings and today's games data
+3. Analyze relevant stats, pitching matchups, recent form (streaks), and trends
+4. Give a probability (0-100%) the pick goes OVER
+5. Give a BET or FADE recommendation with confidence: LOW / MEDIUM / HIGH / LOCK
+
+Respond in exactly these sections:
+📊 PICK ANALYSIS
+🔢 KEY STATS & TRENDS
+⚡ EDGE FACTORS
+🎯 PROBABILITY: [X]% chance of going OVER
+🏆 RECOMMENDATION: [BET OVER / FADE THE OVER] — Confidence: [LOW/MEDIUM/HIGH/LOCK]
+💬 SCOUT'S TAKE (2-3 punchy sentences)
+
+Use the live data provided. Be direct, specific, use real numbers. No fluff.`;
+
+/* ── BOOT ── */
+window.onload = async () => {
+  const key = localStorage.getItem('scout_api_key');
+  if (key) document.getElementById('apikey-input').value = key;
+  document.getElementById('backend-url-display').textContent = BACKEND.replace('https://', '');
+  await fetchLiveData();
+};
+
+/* ── LIVE DATA ── */
+async function fetchLiveData() {
+  const dot = document.getElementById('live-dot');
+  dot.className = 'loading'; dot.textContent = '● CONNECTING';
+  try {
+    const [gamesRes, standingsRes] = await Promise.all([
+      fetch(`${BACKEND}/games/today`),
+      fetch(`${BACKEND}/standings`)
+    ]);
+    const gamesData = await gamesRes.json();
+    const standingsData = await standingsRes.json();
+
+    if (gamesData.success) { liveGames = gamesData.games; renderGamesStrip(gamesData.games); }
+    if (standingsData.success) { liveStandings = standingsData.divisions; }
+
+    dot.className = ''; dot.textContent = '● LIVE';
+    document.getElementById('backend-status').style.color = 'var(--green)';
+    document.getElementById('backend-status').textContent = 'Online ✓';
+    document.getElementById('last-synced').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  } catch(err) {
+    dot.className = 'error'; dot.textContent = '● OFFLINE';
+    document.getElementById('backend-status').style.color = 'var(--red)';
+    document.getElementById('backend-status').textContent = 'Offline ✗';
+    renderGamesStripFallback();
+  }
+}
+
+/* ── GAMES STRIP ── */
+function renderGamesStrip(games) {
+  const el = document.getElementById('games-scroll');
+  if (!games || !games.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:14px">No games today</div>'; return; }
+  el.innerHTML = games.map(g => {
+    const isLive = g.status === 'In Progress';
+    const isFinal = g.status === 'Final' || g.status === 'Game Over';
+    const timeLabel = isFinal ? 'FINAL' : isLive ? 'LIVE' : g.time + ' ET';
+    const scoreOrPitchers = (isLive || isFinal)
+      ? `<div class="game-chip-score">${g.away.score} — ${g.home.score}</div>`
+      : `<div class="game-chip-pitchers">${g.away.pitcher}<br/>${g.home.pitcher}</div>`;
+    return `<div class="game-chip">
+      <div class="game-chip-time ${isLive ? 'live' : ''}">${timeLabel}</div>
+      <div class="game-chip-teams">${g.away.name.split(' ').pop()} vs ${g.home.name.split(' ').pop()}</div>
+      ${scoreOrPitchers}
+    </div>`;
+  }).join('');
+}
+
+function renderGamesStripFallback() {
+  document.getElementById('games-scroll').innerHTML = '<div style="color:var(--muted);font-size:12px;padding:14px">⚠️ Could not load games — backend may be sleeping</div>';
+}
+
+/* ── DRAWER ── */
+function openDrawer() { document.getElementById('drawer').classList.add('open'); document.getElementById('overlay').classList.add('open'); }
+function closeDrawer() { document.getElementById('drawer').classList.remove('open'); document.getElementById('overlay').classList.remove('open'); }
+
+/* ── NAV ── */
+const pageTitles = { analyze: 'Analyze Pick', standings: 'Standings', history: 'Pick History', settings: 'Settings' };
+function goTo(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelector(`[data-page="${page}"]`).classList.add('active');
+  document.getElementById('page-title').textContent = pageTitles[page];
+  document.getElementById('pages').scrollTop = 0;
+  closeDrawer();
+  if (page === 'standings') renderStandings();
+  if (page === 'history') renderHistory();
+}
+
+/* ── STANDINGS ── */
+function renderStandings() {
+  const el = document.getElementById('standings-content');
+  if (!liveStandings) {
+    el.innerHTML = '<div class="card"><div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">⚠️ Live standings unavailable.<br/>Check Settings to verify backend is online.</div></div>';
+    return;
+  }
+  el.innerHTML = '';
+  let lastLeague = '';
+  liveStandings.forEach(div => {
+    if (div.division !== lastLeague) {
+      lastLeague = div.division;
+      const hdr = document.createElement('div');
+      hdr.className = 'league-header';
+      hdr.textContent = div.division === 'AL' || div.division?.includes('American') ? '── AMERICAN LEAGUE ──' : '── NATIONAL LEAGUE ──';
+      el.appendChild(hdr);
+    }
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.marginBottom = '12px';
+    const divName = div.division || '';
+    card.innerHTML = `
+      <div class="card-label">${divName}</div>
+      <table class="standings-table">
+        <thead><tr><th>Team</th><th>W</th><th>L</th><th>PCT</th><th>GB</th><th>STK</th></tr></thead>
+        <tbody>${div.teams.map((t, i) => {
+          const isHot = t.streak && t.streak.startsWith('W');
+          const isCold = t.streak && t.streak.startsWith('L');
+          return `<tr class="${i === 0 ? 'leader' : ''}">
+            <td class="team-name">${t.name.replace(/^(San |Los |New |St\. |Tampa |Kansas )/, m => m)}</td>
+            <td>${t.w}</td><td>${t.l}</td><td>${t.pct}</td><td>${t.gb}</td>
+            <td class="${isHot ? 'streak-hot' : isCold ? 'streak-cold' : ''}">${t.streak || '-'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+    el.appendChild(card);
+  });
+}
+
+/* ── HISTORY ── */
+function renderHistory() {
+  const el = document.getElementById('history-content');
+  el.innerHTML = '';
+  if (!pickHistory.length) {
+    el.innerHTML = `<div class="history-empty"><div class="history-empty-icon">📭</div>No picks yet.<br/>Head to Analyze Pick to get started.</div>`;
+    return;
+  }
+  pickHistory.slice().reverse().forEach(pick => {
+    const card = document.createElement('div');
+    card.className = 'card pick-card';
+    const isBet = pick.rec && pick.rec.includes('BET OVER');
+    const color = pick.pct >= 65 ? 'var(--green)' : pick.pct >= 45 ? '#ffd700' : 'var(--red)';
+    card.innerHTML = `
+      <div class="pick-meta">
+        <div class="pick-date">${pick.date}</div>
+        <div class="pick-badge ${isBet ? 'badge-bet' : 'badge-fade'}">${isBet ? 'BET OVER' : 'FADE'}</div>
+      </div>
+      <div class="pick-pct" style="color:${color}">${pick.pct}%</div>
+      <div class="pick-summary">${pick.summary}</div>`;
+    el.appendChild(card);
+  });
+  const btn = document.createElement('button');
+  btn.className = 'clear-btn'; btn.textContent = '🗑 Clear History'; btn.onclick = clearHistory;
+  el.appendChild(btn);
+}
+
+function clearHistory() {
+  if (!confirm('Clear all pick history?')) return;
+  pickHistory = []; localStorage.removeItem('scout_history'); renderHistory();
+}
+
+/* ── SETTINGS ── */
+function saveKey() {
+  const key = document.getElementById('apikey-input').value.trim();
+  if (!key) return;
+  localStorage.setItem('scout_api_key', key);
+  const btn = document.querySelector('.settings-save');
+  btn.textContent = '✓ Saved!';
+  setTimeout(() => btn.textContent = 'Save API Key', 2000);
+}
+
+/* ── ANALYZE ── */
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  clearAnalysis();
+  const reader = new FileReader();
+  reader.onload = ev => {
+    imageBase64 = ev.target.result.split(',')[1];
+    document.getElementById('preview-img').src = ev.target.result;
+    document.getElementById('preview-img').style.display = 'block';
+    document.getElementById('upload-placeholder').style.display = 'none';
+    document.getElementById('loaded-badge').style.display = 'block';
+    document.getElementById('upload-zone').classList.add('has-image');
+    document.getElementById('upload-zone').onclick = null;
+    document.getElementById('btn-row').style.display = 'flex';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearAll() {
+  imageBase64 = null;
+  document.getElementById('preview-img').style.display = 'none';
+  document.getElementById('preview-img').src = '';
+  document.getElementById('upload-placeholder').style.display = 'block';
+  document.getElementById('loaded-badge').style.display = 'none';
+  document.getElementById('upload-zone').classList.remove('has-image');
+  document.getElementById('upload-zone').onclick = () => document.getElementById('file-input').click();
+  document.getElementById('btn-row').style.display = 'none';
+  document.getElementById('file-input').value = '';
+  clearAnalysis();
+}
+
+function clearAnalysis() {
+  document.getElementById('error-box').className = '';
+  document.getElementById('error-box').textContent = '';
+  document.getElementById('loading').className = '';
+  document.getElementById('analysis-box').className = '';
+  document.getElementById('analysis-content').innerHTML = '';
+}
+
+function buildLiveContext() {
+  let ctx = '';
+  if (liveStandings) {
+    ctx += 'LIVE MLB STANDINGS:\n';
+    liveStandings.forEach(div => {
+      ctx += `${div.division}: ` + div.teams.map(t => `${t.name} ${t.w}-${t.l} (${t.streak || '-'})`).join(', ') + '\n';
+    });
+  }
+  if (liveGames) {
+    ctx += '\nTODAY\'S GAMES & STARTING PITCHERS:\n';
+    liveGames.forEach(g => {
+      ctx += `${g.away.name} (${g.away.pitcher}) @ ${g.home.name} (${g.home.pitcher}) — ${g.time} ET\n`;
+    });
+  }
+  return ctx;
+}
+
+async function analyze() {
+  const apiKey = localStorage.getItem('scout_api_key') || '';
+  if (!apiKey) { showError('⚠️ No API key. Go to Settings and add your Anthropic API key.'); return; }
+  if (!imageBase64) return;
+
+  clearAnalysis();
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true; btn.textContent = '⚡ Analyzing...';
+  document.getElementById('loading').className = 'show';
+
+  const liveContext = buildLiveContext();
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: SYSTEM_PROMPT,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: `${liveContext}\n\nAnalyze this betting pick screenshot using the live data above.` },
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } }
+          ]
+        }]
+      })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const text = data.content.map(b => b.text || '').join('\n');
+    renderAnalysis(text);
+    saveToHistory(text);
+  } catch(err) {
+    showError('⚠️ ' + (err.message || 'Analysis failed. Check your API key.'));
+  }
+  document.getElementById('loading').className = '';
+  btn.disabled = false; btn.textContent = '⚡ Analyze Pick';
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-box');
+  el.textContent = msg; el.className = 'show';
+}
+
+function renderAnalysis(text) {
+  const lines = text.split('\n').filter(Boolean);
+  const container = document.getElementById('analysis-content');
+  container.innerHTML = '';
+  lines.forEach(line => {
+    if (line.startsWith('🎯 PROBABILITY')) {
+      const match = line.match(/(\d+)%/);
+      const pct = match ? parseInt(match[1]) : null;
+      const color = pct >= 65 ? 'var(--green)' : pct >= 45 ? '#ffd700' : 'var(--red)';
+      const el = document.createElement('div');
+      el.className = 'prob-card';
+      el.style.borderLeft = `4px solid ${color}`;
+      el.innerHTML = `<div class="prob-label">OVER PROBABILITY</div>${pct ? `<div class="prob-number" style="color:${color}">${pct}%</div>` : ''}<div class="prob-text">${line.replace(/🎯 PROBABILITY:?\s*/i,'')}</div>`;
+      container.appendChild(el);
+    } else if (line.startsWith('🏆 RECOMMENDATION')) {
+      const isBet = line.toUpperCase().includes('BET OVER');
+      const el = document.createElement('div');
+      el.className = `rec-card ${isBet ? 'rec-bet' : 'rec-fade'}`;
+      el.textContent = (line.toUpperCase().includes('LOCK') ? '🔒 ' : '') + line;
+      container.appendChild(el);
+    } else if (line.match(/^[📊🔢⚡💬]/)) {
+      const el = document.createElement('div');
+      el.className = 'section-header';
+      el.textContent = line;
+      container.appendChild(el);
+    } else {
+      const el = document.createElement('div');
+      el.className = 'analysis-line';
+      el.textContent = line;
+      container.appendChild(el);
+    }
+  });
+  document.getElementById('analysis-box').className = 'show';
+  document.getElementById('analysis-box').scrollIntoView({ behavior: 'smooth' });
+}
+
+function saveToHistory(text) {
+  const pctMatch = text.match(/(\d+)%/);
+  const pct = pctMatch ? parseInt(pctMatch[1]) : 0;
+  const recMatch = text.match(/🏆 RECOMMENDATION:(.*)/);
+  const rec = recMatch ? recMatch[1].trim() : '';
+  const lines = text.split('\n').filter(Boolean);
+  const takeIdx = lines.findIndex(l => l.startsWith('💬'));
+  const summary = takeIdx >= 0 ? lines.slice(takeIdx + 1).join(' ').slice(0, 120) + '...' : '';
+  const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  pickHistory.push({ pct, rec, summary, date });
+  localStorage.setItem('scout_history', JSON.stringify(pickHistory));
+}
+</script>
+</body>
+</html>
