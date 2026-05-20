@@ -7,7 +7,7 @@ app.options('*', cors());
 app.use(express.json());
 
 const MLB_BASE = process.env.MLB_BASE || 'https://statsapi.mlb.com/api/v1';
-const SEASON = process.env.SEASON || '2025';
+const SEASON = process.env.SEASON || '2026';
 
 app.get('/standings', async (req, res) => {
   try {
